@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#23201b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>成雌タンク残量計</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: 現場の道具。迷わず読める、数字が主役
+   IDEA: タンクの点検窓に当てる目盛りテープ
+   PICTURE: 実物の写真に、ドラッグできる「ここまで来ていた」線と0.5t目盛り
+   COLOUR and TYPE: 白地・墨色、飼料の茶色をアクセント、FRPのアイボリー。BIZ UDPゴシック
+   LAYOUT: 左に写真、右に大きな結果と操作。600px未満は 写真→結果→操作 */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#16130f);--ink:light-dark(#1b1916,#f1ece4);--sub:light-dark(#5d574f,#b9b0a3);--line:light-dark(#e4ddd2,#3a332b);--feed:#a8641f;--feed2:light-dark(#f6ead9,#2c2217);--card:light-dark(#faf7f2,#201b15)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "BIZ UDPGothic",system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(20px,3vw,40px) max(4vw,14px);max-width:1240px;margin:0 auto}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.1;margin:0 0 4px;text-wrap:balance}
+.lead{color:var(--sub);margin:0 0 18px;font-size:15px}
+.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:clamp(16px,3vw,36px);align-items:start}
+.photo{position:relative;background:#222;border-radius:12px;overflow:hidden;touch-action:none;user-select:none}
+.photo svg{display:block;width:100%;height:auto;cursor:ns-resize}
+.res{background:var(--feed2);border-radius:12px;padding:18px 20px}
+.res .k{font-size:14px;color:var(--sub)}
+.big{font-size:clamp(56px,9vw,88px);font-weight:700;line-height:1;color:var(--feed);white-space:nowrap}
+.big small{font-size:.38em;color:var(--ink);margin-left:4px}
+.alt{margin-top:6px;font-size:15px}
+.meter{height:14px;background:var(--bg);border-radius:7px;overflow:hidden;margin:14px 0 6px;border:1px solid var(--line)}
+.meter i{display:block;height:100%;background:var(--feed)}
+.rows{display:grid;grid-template-columns:auto auto;gap:4px 16px;font-size:16px;margin-top:10px}
+.rows b{text-align:right;white-space:nowrap}
+.ctl{margin-top:16px;display:grid;gap:10px}
+.step{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button,select,input{font:inherit;font-size:16px}
+button{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--feed);outline-offset:2px}
+button.pri{background:var(--feed);color:#fff;border-color:var(--feed)}
+input[type=range]{width:100%;accent-color:var(--feed);min-height:44px}
+input[type=number]{width:6.5em;min-height:44px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);text-align:right}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0;flex:1}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+details{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:700}
+.set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;margin:8px 0}
+.note{font-size:14px;color:var(--sub)}
+.warn{font-size:14px;color:var(--sub);border-left:3px solid var(--feed);padding-left:10px;margin-top:14px}
+@media(max-width:600px){.grid{grid-template-columns:1fr}.photo{max-height:70vh}}
+#mini{display:none}
+@media(max-width:600px){#mini{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:5;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:#23201b;color:#fff;font-size:15px}#mini b{font-size:28px;color:#f0a55a}body{padding-bottom:72px}}
+@media(prefers-reduced-motion:no-preference){.meter i{transition:width .15s}}
+</style>
+</head>
+<body>
+<div class="band">
+<h1>成雌①タンク 残量計</h1>
+<p class="lead">写真の上を上下になぞるか、下のつまみを動かして「ここまで来ていた」の高さに線を合わせてください。</p>
+<div class="grid">
+  <div class="photo" id="ph"><svg id="sv" viewBox="230 170 560 690" aria-label="タンクの写真と残量の線"></svg></div>
+  <div>
+    <div class="res">
+      <div class="k" id="basisLbl">今の量（満タン2.5t基準）</div>
+      <div class="big" id="tons">–<small>t</small></div>
+      <div class="alt" id="alt"></div>
+      <div class="meter"><i id="bar"></i></div>
+      <div class="rows">
+        <span>線の高さ（排出口の上から）</span><b id="hcm"></b>
+        <span>満タンまで あと</span><b id="free"></b>
+        <span>9割まで あと（発注の目安）</span><b id="free9"></b>
+        <span>満タンの量</span><b id="full"></b>
+      </div>
+    </div>
+    <div class="ctl">
+      <input type="range" id="rg" min="0" max="310" step="1" aria-label="線の高さ（cm）">
+      <div class="step">
+        <button id="dn5">−5cm</button><button id="dn1">−1cm</button><button id="up1">＋1cm</button><button id="up5">＋5cm</button>
+      </div>
+      <div class="step"><button id="toWin">上の窓の下の端へ</button><button id="toPhoto">写真の時点の量へ</button></div>
+      <div>
+        <div class="note" style="margin-bottom:4px">何を基準に重さを出すか</div>
+        <div class="seg" role="group"><button id="bFull" aria-pressed="true">満タン＝2.5t（引き継ぎ）</button><button id="bWin" aria-pressed="false">窓で1500kg（記憶）</button><button id="bDel" aria-pressed="false">納品記録</button></div>
+      </div>
+    </div>
+    <div class="res" style="margin-top:16px;background:var(--card);border:1px solid var(--line)">
+      <div style="font-weight:700;font-size:18px">納品で合わせる</div>
+      <p class="note" style="margin:4px 0 10px">納品前と納品後に、窓から見える飼料の高さへ線を合わせて記録します。空でなくても使えます。</p>
+      <div class="set" style="margin:0">
+        <span>① 納品前の線</span><span class="step"><b id="dB">未記録</b><button id="setB">今の線</button></span>
+        <span>② 納品後の線</span><span class="step"><b id="dA">未記録</b><button id="setA">今の線</button></span>
+        <label for="dT">③ 納品量（t）</label><input type="number" id="dT" step="0.1" min="0.1" placeholder="例 1.5">
+      </div>
+      <div class="step" style="margin-top:10px"><button class="pri" id="doDel">この納品で合わせる</button></div>
+      <p class="note" id="dMsg" style="margin:8px 0 0"></p>
+      <ul class="note" id="dLog" style="margin:6px 0 0;padding-left:1.2em"></ul>
+    </div>
+  </div>
+</div>
+
+<details>
+<summary>寸法と基準の設定</summary>
+<div class="set">
+  <label for="sCone">円すい部の縦の高さ（m）</label><input type="number" id="sCone" step="0.05" min="0.5">
+  <label for="sCyl">円筒部の高さ（m）</label><input type="number" id="sCyl" step="0.05" min="0.5">
+  <label for="sD">直径（m・かさ比重の確認用）</label><input type="number" id="sD" step="0.05" min="0.5">
+  <label for="sFull">満タンの量（t）</label><input type="number" id="sFull" step="0.1" min="0.1">
+  <label for="sCalT">記憶・記録の量（t）</label><input type="number" id="sCalT" step="0.1" min="0.1">
+  <label>その量の高さ（cm）</label><b id="sCalH"></b>
+</div>
+<div class="step"><button class="pri" id="setCal">今の線を「記憶・記録の高さ」にする</button><button id="reset">初期値に戻す</button></div>
+<p class="note">納品記録が取れたら：空に近い状態から入れた量を「記憶・記録の量」に入れ、納品後の窓の高さに線を合わせて上のボタンを押すと、その記録が基準になります。設定はこの端末のブラウザにだけ保存されます。</p>
+<p class="note" id="dens"></p>
+</details>
+
+<div id="mini" aria-live="polite"><span>今 <b id="mT">–</b> t</span><span id="mF"></span></div>
+<p class="warn">線を合わせるのは、窓から飼料の面が見えているときだけにしてください（見える範囲：円すい部の窓、円筒下の窓、上の窓）。納品直後は真ん中が山になって窓側が低く見えるので、少し使ってから見るほうが正確です。<br>不確実：写真は下から見上げて撮ったもので、高さは区間ごとに直線で読み替えています。目盛りの誤差は±10%ほどと見てください。円すい部を下の排出口までの円すいとして計算しています。発注の上限は、確定した容量の9割を目安にしてください。</p>
+</div>
+
+<script>
+{
+const IMG={w:952,h:1264};
+// 写真上の位置（px）：排出口の上=820、円すいと円筒の境=520、上の縁=265
+const P={yOut:820,yJoin:520,yTop:265,xl:338,xr:635,xbl:458,xbr:505,yWinBot:420,yPhoto:385};
+const DEF={cone:1.6,cyl:1.5,D:1.6,full:2.5,calT:1.5,calH:null,basis:'full',h:null,kD:null,dB:null,dA:null,log:[]};
+let S={...DEF};
+try{const j=JSON.parse(localStorage.getItem('tankCalc1')||'null');if(j)S={...S,...j}}catch(e){}
+const $=id=>document.getElementById(id);
+const Htot=()=>S.cone+S.cyl;
+function yToH(y){if(y>=P.yOut)return 0;if(y>=P.yJoin)return (P.yOut-y)/(P.yOut-P.yJoin)*S.cone;return Math.min(Htot(),S.cone+(P.yJoin-y)/(P.yJoin-P.yTop)*S.cyl)}
+function hToY(h){if(h<=S.cone)return P.yOut-h/S.cone*(P.yOut-P.yJoin);return P.yJoin-(h-S.cone)/S.cyl*(P.yJoin-P.yTop)}
+// 円の面積を除いた容積（m）：円すい部は h^3/(3H^2)、それより上は円筒
+function vr(h){h=Math.max(0,Math.min(h,Htot()));return h<=S.cone?h**3/(3*S.cone**2):S.cone/3+(h-S.cone)}
+if(S.calH==null)S.calH=yToH(P.yWinBot);
+if(S.h==null)S.h=yToH(P.yWinBot);
+const kFull=()=>S.full/vr(Htot());
+const kWin=()=>S.calT/vr(S.calH);
+const K=()=>S.basis==='deliv'&&S.kD?S.kD:S.basis==='win'?kWin():kFull();
+const BN={full:()=>`満タン${S.full}t`,win:()=>`窓で${S.calT}t`,deliv:()=>'納品記録'};
+const tonsAt=h=>K()*vr(h);
+function hForTons(t){let a=0,b=Htot();for(let i=0;i<40;i++){const m=(a+b)/2;tonsAt(m)<t?a=m:b=m}return (a+b)/2}
+function xAt(y,side){if(y<=P.yJoin)return side?P.xr:P.xl;const f=(y-P.yJoin)/(P.yOut-P.yJoin);return side?P.xr+(P.xbr-P.xr)*f:P.xl+(P.xbl-P.xl)*f}
+const sv=$('sv');
+function draw(){
+  const y=hToY(S.h);
+  let pts=[[xAt(y,0),y]];
+  if(y<P.yJoin){pts.push([P.xl,P.yJoin])}
+  pts.push([P.xbl,P.yOut],[P.xbr,P.yOut]);
+  if(y<P.yJoin){pts.push([P.xr,P.yJoin])}
+  pts.push([xAt(y,1),y]);
+  const full=tonsAt(Htot());
+  let ticks='';
+  for(let t=0.5;t<full-0.05;t+=0.5){const ty=hToY(hForTons(t));ticks+=`<line x1="${xAt(ty,1)+4}" x2="${xAt(ty,1)+22}" y1="${ty}" y2="${ty}" stroke="#fff" stroke-width="2.5"/><text x="${xAt(ty,1)+26}" y="${ty+6}" font-size="17" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke" font-weight="700">${t.toFixed(1)}t</text>`}
+  const wy=hToY(S.calH);
+  sv.innerHTML=`<image href="tank.jpg" x="0" y="0" width="${IMG.w}" height="${IMG.h}"/>
+  <polygon points="${pts.map(p=>p.join(',')).join(' ')}" fill="#a8641f" fill-opacity=".38"/>
+  ${ticks}
+  ${S.basis==='win'?`<line x1="${P.xl-30}" x2="${P.xl}" y1="${wy}" y2="${wy}" stroke="#ffd34d" stroke-width="3" stroke-dasharray="6 4"/><text x="${P.xl-32}" y="${wy-6}" font-size="15" text-anchor="end" fill="#ffd34d" stroke="#000" stroke-width="3" paint-order="stroke">記憶 ${S.calT}t</text>`:''}
+  <line x1="${P.xl-40}" x2="${P.xr+10}" y1="${y}" y2="${y}" stroke="#ff3b1f" stroke-width="4"/>
+  <circle cx="${P.xl-40}" cy="${y}" r="11" fill="#ff3b1f" stroke="#fff" stroke-width="3"/>`;
+  const t=tonsAt(S.h),f=tonsAt(Htot());
+  $('tons').innerHTML=`${t.toFixed(2)}<small>t</small>`;
+  const ob=['full','win','deliv'].filter(b=>b!==S.basis&&(b!=='deliv'||S.kD));
+  const kOf=b=>b==='full'?kFull():b==='win'?kWin():S.kD;
+  $('alt').textContent='ほかの基準では '+ob.map(b=>`${BN[b]()}：約${(kOf(b)*vr(S.h)).toFixed(2)}t`).join('／');
+  $('basisLbl').textContent=`今の量（${BN[S.basis]()}基準）`;
+  $('bDel').disabled=!S.kD;$('bDel').setAttribute('aria-pressed',S.basis==='deliv');
+  $('dB').textContent=S.dB==null?'未記録':Math.round(S.dB*100)+' cm';
+  $('dA').textContent=S.dA==null?'未記録':Math.round(S.dA*100)+' cm';
+  $('dLog').innerHTML=S.log.slice(-5).reverse().map(l=>`<li>${l.d}：${Math.round(l.b*100)}→${Math.round(l.a*100)}cm に ${l.t}t → 満タン約${l.f.toFixed(2)}t</li>`).join('');
+  $('bar').style.width=(t/f*100).toFixed(1)+'%';
+  $('hcm').textContent=Math.round(S.h*100)+' cm';
+  $('free').textContent=Math.max(0,f-t).toFixed(2)+' t';
+  $('free9').textContent=Math.max(0,f*0.9-t).toFixed(2)+' t';
+  $('full').textContent=f.toFixed(2)+' t';
+  $('mT').textContent=t.toFixed(2);$('mF').textContent='満タンまで '+Math.max(0,f-t).toFixed(2)+' t';
+  $('rg').max=Math.round(Htot()*100);$('rg').value=Math.round(S.h*100);
+  $('sCalH').textContent=Math.round(S.calH*100)+' cm';
+  const V=Math.PI*(S.D/2)**2*vr(Htot());
+  $('dens').textContent=`直径${S.D}mだと満タンの容積は約${V.toFixed(1)}m³、かさ比重は約${(f/V).toFixed(2)}t/m³（配合飼料はふつう0.5〜0.7）。`;
+  $('bFull').setAttribute('aria-pressed',S.basis==='full');$('bWin').setAttribute('aria-pressed',S.basis==='win');
+  try{localStorage.setItem('tankCalc1',JSON.stringify(S))}catch(e){}
+}
+function setH(h){S.h=Math.max(0,Math.min(Htot(),h));draw()}
+function fromEvent(e){const pt=sv.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const m=sv.getScreenCTM();if(!m)return;setH(yToH(pt.matrixTransform(m.inverse()).y))}
+let drag=false;
+sv.addEventListener('pointerdown',e=>{drag=true;sv.setPointerCapture(e.pointerId);fromEvent(e)});
+sv.addEventListener('pointermove',e=>{if(drag)fromEvent(e)});
+sv.addEventListener('pointerup',()=>drag=false);
+sv.addEventListener('pointercancel',()=>drag=false);
+$('rg').addEventListener('input',e=>setH(+e.target.value/100));
+[['dn5',-5],['dn1',-1],['up1',1],['up5',5]].forEach(([id,d])=>$(id).addEventListener('click',()=>setH(S.h+d/100)));
+$('toWin').addEventListener('click',()=>setH(S.calH));
+$('toPhoto').addEventListener('click',()=>setH(yToH(P.yPhoto)));
+$('bFull').addEventListener('click',()=>{S.basis='full';draw()});
+$('bWin').addEventListener('click',()=>{S.basis='win';draw()});
+const inputs={sCone:'cone',sCyl:'cyl',sD:'D',sFull:'full',sCalT:'calT'};
+function fillInputs(){for(const[id,k]of Object.entries(inputs))$(id).value=S[k]}
+for(const[id,k]of Object.entries(inputs))$(id).addEventListener('change',e=>{const v=+e.target.value;if(v>0){const keepH=S.h/Htot(),keepC=S.calH/Htot();S[k]=v;if(k==='cone'||k==='cyl'){S.h=keepH*Htot();S.calH=keepC*Htot()}draw()}});
+$('setB').addEventListener('click',()=>{S.dB=S.h;draw()});
+$('setA').addEventListener('click',()=>{S.dA=S.h;draw()});
+$('doDel').addEventListener('click',()=>{const t=+$('dT').value,m=$('dMsg');
+  if(S.dB==null||S.dA==null||!(t>0)){m.textContent='①②の線と③の納品量をそろえてください。';return}
+  const dv=vr(S.dA)-vr(S.dB);
+  if(dv<=0.02){m.textContent='納品後の線が納品前より上になるようにしてください。';return}
+  S.kD=t/dv;S.basis='deliv';const f=S.kD*vr(Htot());
+  const d=new Date();S.log.push({d:`${d.getMonth()+1}/${d.getDate()}`,b:S.dB,a:S.dA,t,f});
+  m.textContent=`この納品から計算した満タンは約${f.toFixed(2)}t です（かさ比重 約${(f/(Math.PI*(S.D/2)**2*vr(Htot()))).toFixed(2)}t/m³）。基準を「納品記録」にしました。`;
+  S.h=S.dA;draw()});
+$('bDel').addEventListener('click',()=>{if(S.kD){S.basis='deliv';draw()}});
+$('setCal').addEventListener('click',()=>{S.calH=S.h;S.basis='win';draw()});
+$('reset').addEventListener('click',()=>{S={...DEF};S.calH=yToH(P.yWinBot);S.h=S.calH;fillInputs();draw()});
+fillInputs();draw();
+try{if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js')}catch(e){}
+}
+</script>
+</body>
+</html>
